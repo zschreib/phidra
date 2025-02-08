@@ -1,0 +1,4 @@
+Query_ID	Target_ID	Sequence_Identity	Alignment_Length	Mismatches	Gap_Openings	Query_Start	Query_End	Target_Start	Target_End	Evalue	Bit_Score
+ENA_ON540301_ON540301_1_16702_19800_29	Enterococcus_phage_phiFL4A_L	0.324	448	301	0	1	446	1	448	8.929E-54	198
+ENA_MK903277_MK903277_1_13689_15860_23	Enterobacteria_phage_T7	0.548	714	316	0	10	723	4	704	3.246E-271	835
+ENA_MN234188_MN234188_1_28917_27130_35	Roseiflexus_sp._RS-1	0.247	567	410	0	35	580	376	942	8.032E-35	134
