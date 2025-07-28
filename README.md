@@ -175,6 +175,9 @@ test_results/
 
 ID: ENA_MF036692_MF036692_1_29921_27213_46 was apart of the DNA polymerase family B, did not have valid domains and therefore was not included in the final pfam_validated_reports
 
+## Citation
+If you found this tool useful, please cite: https://github.com/zschreib/phidra
+
 ## Authors
 
 Contributors names and contact info
