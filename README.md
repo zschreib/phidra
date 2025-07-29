@@ -176,7 +176,7 @@ test_results/
 ID: ENA_MF036692_MF036692_1_29921_27213_46 was apart of the DNA polymerase family B, did not have valid domains and therefore was not included in the final pfam_validated_reports
 
 ## Citation
-If you found this tool useful, please cite: https://github.com/zschreib/phidra
+If you found this tool useful, please cite: Schreiber, Z. D. PHIDRA: *Protein Homology Identification via Domain-Related Architecture*. GitHub. Retrieved July 29, 2025, from [https://github.com/zschreib/phidra/](https://github.com/zschreib/phidra/).
 
 ## Authors
 
