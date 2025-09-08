@@ -161,7 +161,7 @@ def main():
     # Optional arguments group
     optional_args = parser.add_argument_group("Optional Arguments")
     optional_args.add_argument("--threads", "-t", type=int, default=2, help="Number of threads to use")
-    optional_args.add_argument("--version", "-v", action="version", version="PHIDRA v1.0", help="Show program's version number and exit")
+    optional_args.add_argument("--version", "-v", action="version", version="PHIDRA v1.0.0", help="Show program's version number and exit")
 
     args = parser.parse_args()
 

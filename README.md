@@ -1,4 +1,4 @@
-#  PHIDRA ![Version](https://img.shields.io/badge/version-1.0_stable-green)
+#  PHIDRA ![Version](https://img.shields.io/badge/version-1.0.0_stable-green)
 **P**rotein **H**omology **I**dentification via **D**omain-**R**elated **A**rchitecture
 
 A simple way to search and validate identifed Pfam domains of interest against a curated InterProScan Domain Architecture (IDA) file to check whether or not your proteins match a domain composition found in the Interpro Database.
