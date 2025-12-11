@@ -202,7 +202,11 @@ output/
 ## Citation
 If you found this tool useful, please cite: 
 
-Schreiber, Z. D. PHIDRA: *Protein Homology Identification via Domain-Related Architecture*. GitHub. Retrieved Sept 27, 2025, from [https://github.com/zschreib/phidra/](https://github.com/zschreib/phidra/).
+**Primary reference (method):**  
+Schreiber, Zachary D. *Unraveling Viral Gene Associations Through Integrative Computational Approaches.* PhD dissertation, University of Delaware, 2025.
+
+**Software (implementation and version used):**  
+Schreiber, Zachary D. PHIDRA: Protein Homology Identification via Domain-Related Architecture (version 2.0) [Computer software]. GitHub. https://github.com/zschreib/phidra
 
 ## Authors
 
