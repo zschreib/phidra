@@ -410,7 +410,7 @@ def main() -> None:
         "-h", "--help", action="help", help="Show this help message and exit"
     )
     help_args.add_argument(
-        "-v", "--version", action="version", version="PHIDRA v2.0.0",
+        "-v", "--version", action="version", version="PHIDRA v2.1.0",
         help="Show program version and exit"
     )
     
