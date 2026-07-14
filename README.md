@@ -1,4 +1,4 @@
-#  PHIDRA ![Version](https://img.shields.io/badge/version-2.0.0-brightgreen) ![Status](https://img.shields.io/badge/status-stable-brightgreen)
+#  PHIDRA ![Version](https://img.shields.io/badge/version-2.1.0-brightgreen) ![Status](https://img.shields.io/badge/status-stable-brightgreen)
 **P**rotein **H**omology **I**dentification via **D**omain-**R**elated **A**rchitecture
 
 A simple way to search and validate identified Pfam domains of interest against a curated InterProScan Domain Architecture (IDA) file to check whether or not your proteins match a domain composition found in the InterPro Database.
@@ -40,7 +40,6 @@ cd phidra
 
 #Grabs required python packages
 pip install -r requirements.txt
-
 ```
 * Python setup >= Python 3.8, requires MMseqs2 and HMMER to be already set up.
 ```
@@ -115,7 +114,8 @@ Domain architectures help validate protein predictions by ensuring essential fun
 ## Running the tool
 ```
 usage: phidra_run.py [-h] [-v] -i INPUT_FASTA -db SUBJECT_DB -pfam PFAM_HMM_DB -ida IDA_FILE -f FUNCTION -o OUTPUT_DIR
-                     [-t THREADS] [-e EVALUE]
+                     [-t THREADS] [-e EVALUE] [-x COL1,COL2,...] [-a {0,1,2,3,4}]
+                     [-s SENSITIVITY]
 
 Identifies homologous proteins and associated Pfam domains from input protein sequences, while comparing against
 InterPro Domain Architectures to analyze domain-level similarities and functional relationships.
@@ -143,17 +143,36 @@ Optional arguments:
                         Threads for tools supporting -cpu/--threads (default: 1)
   -e EVALUE, --evalue EVALUE
                         E-value threshold for mmseqs easy-search (e.g., 1E-3, 1e-5) (default: 1E-3)
+  -x COL1,COL2,..., --extra_columns COL1,COL2,...
+                        Comma-separated extra mmseqs --format-output columns appended after
+                        the fixed base columns (e.g. qcov,tcov or qaln,taln). See the mmseqs2
+                        wiki for valid column names (default: )
+  -a {0,1,2,3,4}, --alignment_mode {0,1,2,3,4}
+                        mmseqs --alignment-mode (default: mmseqs' own default for easy-search).
+                        Use 3 or higher for real (not estimated) sequence identity, or if
+                        --extra_columns requests alignment-dependent fields like qaln/taln/cigar
+                        (default: None)
+  -s SENSITIVITY, --sensitivity SENSITIVITY
+                        mmseqs -s sensitivity (default: mmseqs' own default) (default: None)
 ```
 
-Example run using the provided examples directory:
+Test run using the provided example directory:
 
 ```
-python phidra_run.py -i examples/query/polA_test.fa -db examples/subject/pola_16_k12_ref.fa -pfam [pfam_DB_location] -ida examples/IDA/polA_IDA_list.tsv -f examples/output -t 5 -e 1E-3
+python phidra_run.py -i examples/query/polA_test.fa -db examples/subject/pola_16_k12_ref.fa -pfam [pfamDB_dir_location] -ida examples/IDA/polA_IDA_list.tsv -f polA -o examples/output_default
 ```
+### Custom mmseqs output columns and search behavior
+
+If you need extra columns in the mmseqs output (e.g. query/target coverage) or want to change how mmseqs computes alignments, `-x/--extra_columns`, `-a/--alignment_mode`, and `-s/--sensitivity` are passed straight through to `mmseqs easy-search`. The 12 default columns are always kept first and in the same order, so `-x` only ever appends new columns; it never reorders or removes the defaults.
+
+```
+python phidra_run.py -i examples/query/polA_test.fa -db examples/subject/pola_16_k12_ref.fa -pfam [pfamDB_dir_location] -ida examples/IDA/polA_IDA_list.tsv -f polA -o examples/output_custom -t 5 -e 1E-6 -x qcov,tcov,qlen,tlen -a 3 -s 7
+```
+This adds `qcov`, `tcov`, `qlen`, and `tlen` as extra columns in `hits.tsv`/`bits.tsv`, and sets `--alignment-mode 3 (slower)` so mmseqs reports real sequence identity (`numIdentical/alnLen`) instead of the estimated identity `easy-search` uses by default.
 
 ## Results output summary
 ```
-output/
+output_default/polA
 ├── final_results/
 │   ├── pfam_coverage_report.tsv                # Summary of Pfam domain coverage across all search hits
 │   ├── summary.tsv                             # Summary table combining counts for each iteration
@@ -161,7 +180,7 @@ output/
 │   │   ├── domains.fa                          # FASTA of individual Pfam domain hits
 │   │   ├── full_proteins.fa                    # Full-length proteins containing those domains
 │   │   └── pfam_unvalidated_merged_report.tsv  # Merged table of unvalidated domain results
-│   └── validated_ida_pfams/                 # Pfam domains validated by IDA recursion
+│   └── validated_ida_pfams/                 # Pfam domains validated by IDA file
 │       ├── domains.fa                          # FASTA of validated Pfam domain hits
 │       ├── full_proteins.fa                    # Full-length proteins containing validated domains
 │       └── pfam_validated_merged_report.tsv    # Merged table of validated domain results
@@ -173,8 +192,7 @@ output/
 │   │   ├── hits.tsv                             # Top hit table by best e-value
 │   │   └── res.m8                               # MMseqs2 table output (m8 format) for all significant initial hits
 │   └── recursive/                           # Secondary MMseqs2 search using hits as queries
-│       └── res.m8                               # MMseqs2 table output (m8 format) for all significant recursive hits
-│                                                # No recursive hits so tophit/FASTA not created
+│       └── res.m8                               # MMseqs2 table output (m8 format) for all significant recursive hits (Empty if no hits found)
 └── pfam/
     ├── initial/                             # Initial Pfam HMMER domain search results
     │   ├── pfam_coverage_report.tsv             # Coverage summary of initial Pfam search
@@ -187,26 +205,37 @@ output/
     │       ├── full_proteins.fa                 # Full-length proteins for validated hits
     │       └── pfam_validated_report.tsv        # Tabular report of validated domain results
     └── recursive/                               # Results from recursive Pfam search
-        (empty)                                  # No recursive hits so pfam files not created
+        (If empty)                               # No recursive hits so pfam files not created
 ```
 
 * The named output directory contains the complete output of the `phidra` pipeline.
 * Includes homology search results, IDA-validated and unvalidated Pfam domain calls with both sequence-level and domain-level FASTA files, and comprehensive summary tables. 
 * A detailed description of each file is provided above to help navigate and interpret the results.
 
+## Changelog
+
+### v2.1.0
+**Added**
+- `-x`/`--extra_columns`: append extra mmseqs `--format-output` accepted columns (e.g. `qcov,tcov`) after the fixed default 12. The default columns are always kept first and in order, so existing scripts parsing `hits.tsv`/`bits.tsv` by position are unaffected.
+- `-a`/`--alignment_mode`: sets mmseqs `--alignment-mode`. In particular, `-a 3` switches from `easy-search`'s default estimated sequence identity to real identity (`numIdentical/alnLen`).
+- `-s`/`--sensitivity`: sets mmseqs `-s` sensitivity. (`-s 1: Highly accelerated search, -s 7.5: Sensitive for finding remote homologs at the cost of longer computation times.`)
+
+**Notes**
+- A run without `-x`/`-a`/`-s` produces output identical to v2.0.0.
+
 ## Looking for Version 1?
 
-- Browse the stable **[v1.x branch](https://github.com/zschreib/phidra/tree/v1.x)**  
-- Or check the **[v1.0.0 release](https://github.com/zschreib/phidra/releases/tag/v1.0.0)**  
+- Browse the stable **[v1.x branch](https://github.com/zschreib/phidra/tree/v1.x)**
+- Or check the **[v1.0.0 release](https://github.com/zschreib/phidra/releases/tag/v1.0.0)**
 
 ## Citation
 If you found this tool useful, please cite: 
 
-**Primary reference (method):**  
+**Primary reference (method):**
 Schreiber, Zachary D. *Unraveling Viral Gene Associations Through Integrative Computational Approaches.* PhD dissertation, University of Delaware, 2025.
 
-**Software (implementation and version used):**  
-Schreiber, Zachary D. PHIDRA: Protein Homology Identification via Domain-Related Architecture (version 2.0) [Computer software]. GitHub. https://github.com/zschreib/phidra
+**Software (implementation and version used):**
+Schreiber, Zachary D. PHIDRA: Protein Homology Identification via Domain-Related Architecture (version 2.1.0) [Computer software]. GitHub. https://github.com/zschreib/phidra
 
 ## Authors
 

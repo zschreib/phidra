@@ -15,6 +15,49 @@ from tqdm import tqdm
 BIN = Path(__file__).parent / "src"
 LOG_DIR: Path | None = None
 
+# Locked base columns for mmseqs --format-output. Order and identity must
+# never change: mmseqs_tophit_calculation.py reads these by fixed position.
+# Any user-requested --extra_columns are appended after
+MMSEQS_BASE_COLS = [
+    "query", "target", "pident", "alnlen", "mismatch", "gapopen",
+    "qstart", "qend", "tstart", "tend", "evalue", "bits",
+]
+
+# Extra columns that only get populated with a sufficiently high alignment
+# mode (they depend on the backtrace, which lower modes skip for speed).
+ALIGNMENT_DEPENDENT_COLS = {"qaln", "taln", "cigar"}
+
+# Only works with ORF input at the moment
+MMSEQS_SEARCH_TYPE = 1
+
+
+def build_format_output(extra_columns: list[str]) -> str:
+    """Build a --format-output string: locked base columns + user extras appended.
+
+    Rejects re-listing a base column or duplicate extras
+    """
+    dupes_with_base = set(extra_columns) & set(MMSEQS_BASE_COLS)
+    if dupes_with_base:
+        sys.exit(
+            f"--extra_columns cannot re-list base columns already included by "
+            f"default: {sorted(dupes_with_base)}"
+        )
+    if len(extra_columns) != len(set(extra_columns)):
+        sys.exit("--extra_columns contains duplicate entries.")
+    return ",".join(MMSEQS_BASE_COLS + extra_columns)
+
+
+def mmseqs_extra_flags(args: argparse.Namespace) -> str:
+    """Build mmseqs easy-search flags: user-configurable ones plus the locked search-type.
+
+    """
+    parts = [f"--search-type {MMSEQS_SEARCH_TYPE}"]
+    if args.alignment_mode is not None:
+        parts.append(f"--alignment-mode {args.alignment_mode}")
+    if args.sensitivity is not None:
+        parts.append(f"-s {args.sensitivity}")
+    return " ".join(parts)
+
 
 def q(x: object) -> str:
     return _q(str(x))
@@ -40,7 +83,7 @@ def log(msg: str) -> None:
 
 def log_job_details(args: argparse.Namespace) -> None:
     """Emit a single, clearly delimited header with all CLI inputs."""
-    # why: Users need a reproducible record of every invocation parameter at the very top
+    # User need a reproducible record of every invocation parameter at the very top
     sep = "=" * 28
     lines = [
         f"{sep} JOB Details {sep}",
@@ -53,6 +96,10 @@ def log_job_details(args: argparse.Namespace) -> None:
         f"--output_dir       {args.output_dir}",
         f"--threads          {args.threads}",
         f"--evalue           {args.evalue}",
+        f"--extra_columns    {args.extra_columns or '(none)'}",
+        f"--alignment_mode   {args.alignment_mode if args.alignment_mode is not None else '(mmseqs default)'}",
+        f"--search_type      {MMSEQS_SEARCH_TYPE} (fixed: protein input, not user-configurable)",
+        f"--sensitivity      {args.sensitivity if args.sensitivity is not None else '(mmseqs default)'}",
         f"{sep*2}",
     ]
     for line in lines:
@@ -143,6 +190,17 @@ def preflight(args: argparse.Namespace) -> None:
     if args.threads < 1:
         sys.exit("--threads must be >= 1")
 
+    args.extra_columns_list = [c.strip() for c in args.extra_columns.split(",") if c.strip()]
+
+    needs_aln = ALIGNMENT_DEPENDENT_COLS & set(args.extra_columns_list)
+    if needs_aln and (args.alignment_mode is None or args.alignment_mode < 3):
+        sys.exit(
+            f"--extra_columns includes {sorted(needs_aln)}, which require "
+            f"--alignment_mode 3 or higher (got {args.alignment_mode})."
+        )
+
+    build_format_output(args.extra_columns_list)
+
 
 def process(args: argparse.Namespace) -> None:
     base = Path(args.output_dir)
@@ -150,6 +208,13 @@ def process(args: argparse.Namespace) -> None:
     dirs = make_dirs(base, args.function)
 
     py = q(sys.executable)
+
+    fmt = build_format_output(args.extra_columns_list)
+    extra_flags = mmseqs_extra_flags(args)
+    extra_flags_part = f"{extra_flags} " if extra_flags else ""
+    tophit_extra_arg = (
+        f" --extra_columns {q(args.extra_columns)}" if args.extra_columns_list else ""
+    )
 
     # 1) Initial workflow
     steps = [
@@ -164,12 +229,13 @@ def process(args: argparse.Namespace) -> None:
         (
             "Search",
             f"mmseqs easy-search -e {q(args.evalue)} --threads {args.threads} "
+            f"{extra_flags_part}--format-output {q(fmt)} "
             f"{q(args.input_fasta)} {q(dirs['db'] / 'db')} {q(dirs['mm_i'] / 'res.m8')} {q(dirs['mm_i'] / 'tmp')}",
         ),
         (
             "TopHits",
             f"{py} {q(BIN / 'mmseqs_tophit_calculation.py')} "
-            f"{q(dirs['mm_i'] / 'res.m8')} {q(dirs['mm_i'] / 'hits.tsv')} {q(dirs['mm_i'] / 'bits.tsv')}",
+            f"{q(dirs['mm_i'] / 'res.m8')} {q(dirs['mm_i'] / 'hits.tsv')} {q(dirs['mm_i'] / 'bits.tsv')}{tophit_extra_arg}",
         ),
         (
             "MakeFASTA",
@@ -206,6 +272,7 @@ def process(args: argparse.Namespace) -> None:
         recurse_tmp = dirs["mm_r"] / "tmp"
         cmd = (
             f"mmseqs easy-search -e {q(args.evalue)} --threads {args.threads} "
+            f"{extra_flags_part}--format-output {q(fmt)} "
             f"{q(rem)} "
             f"{q(dirs['pf_i'] / 'validated_ida_report' / 'full_proteins.fa')} "
             f"{q(recurse_out)} {q(recurse_tmp)}"
@@ -217,7 +284,7 @@ def process(args: argparse.Namespace) -> None:
                 (
                     "TopHits_R",
                     f"{py} {q(BIN / 'mmseqs_tophit_calculation.py')} "
-                    f"{q(recurse_out)} {q(dirs['mm_r'] / 'hits.tsv')} {q(dirs['mm_r'] / 'bits.tsv')}",
+                    f"{q(recurse_out)} {q(dirs['mm_r'] / 'hits.tsv')} {q(dirs['mm_r'] / 'bits.tsv')}{tophit_extra_arg}",
                 ),
                 (
                     "MakeFASTA_R",
@@ -362,6 +429,27 @@ def main() -> None:
         "--evalue",
         default="1E-3",
         help="E-value threshold for mmseqs easy-search (e.g., 1E-3, 1e-5)",
+    )
+    optional.add_argument(
+        "-x", "--extra_columns", default="", metavar="COL1,COL2,...",
+        help=(
+            "Comma-separated extra mmseqs --format-output columns appended after "
+            "the fixed base columns (e.g. qcov,tcov or qaln,taln). See "
+            "https://github.com/soedinglab/MMseqs2/wiki#custom-alignment-format-with-convertalis "
+            "for valid column names."
+        ),
+    )
+    optional.add_argument(
+        "-a", "--alignment_mode", type=int, choices=[0, 1, 2, 3, 4], default=None,
+        help=(
+            "mmseqs --alignment-mode (default: mmseqs' own default for easy-search). "
+            "Use 3 or higher for real (not estimated) sequence identity, or if "
+            "--extra_columns requests alignment-dependent fields like qaln/taln/cigar."
+        ),
+    )
+    optional.add_argument(
+        "-s", "--sensitivity", type=float, default=None,
+        help="mmseqs -s sensitivity (default: mmseqs' own default)",
     )
     args = p.parse_args()
 
